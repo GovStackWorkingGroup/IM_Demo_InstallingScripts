@@ -29,6 +29,8 @@ er2.egovstack.net
 ...
 ```
 
+NOTE: hostnames must include a number, e.g. er1
+
 4. Edit `digitalocean.yml` to include the correct starting image and droplet type, e.g.:
 
 ```
@@ -50,23 +52,27 @@ $ ansible-playbook -i ./hosts digitalocean.yml
 $ ansible-playbook -i ./hosts drop.yml
 ```
 
-Be sure to add/remove each droplet's IPs to the Ansible inventory, e.g. by editing `hosts`.
+Note that you may need to run this multiple times to remove all subdomains...
 
-## Set up SSL certificates and SSH access droplets
+## Set up SSL certificates and SSH access to droplets
 
-1. Add hosts key to droplets:
+1. Add known hosts to all droplets:
 
 ```
 $ ANSIBLE_HOST_KEY_CHECKING=false ansible-playbook -i hosts store_known_hosts.yml
 ```
 
-2. This playbook creates non-root user, updates packages, configures SSH access, and generates LetsEncrypt certificates:
+NOTE: if this script fails for any reason, you likely need to clean references to old hosts from the `~/.ssh./known_hosts` file on the Ansible Control Node.
+
+If you see an error like `dig +short er3.egovstack.net` you likely need to wait a minute for the DNS update from `digitalocean.yml` to propagate.
+
+2. This playbook creates non-root user, updates packages, configures SSH access, and generates LetsEncrypt certificates for all droplets. On `ansible.egovstack.net`, hit `<enter>` for the forst `SSH password:` prompt. Use `password` from `vars_with_secret.yml` for the `BECOME password[defaults to SSH password]:` prompt. :
 
 ```
-$ ansible-playbook -i hosts -k provision.yml
+$ ansible-playbook -i hosts -k provision.yml --ask-become-pass
 ```
 
-3. Reboot all droplets:
+3. OPTIONAL: Reboot all droplets. On `ansible.egovstack.net`, use `password` from `vars_with_secret.yml` for the `BECOME password:` prompt:
 
 ```
 $ ansible --ask-become-pass -i hosts -b -m reboot all
@@ -75,3 +81,15 @@ $ ansible --ask-become-pass -i hosts -b -m reboot all
 ## Set up Information Mediator
 
 See [Installing X-Road on DigitalOcean](https://docs.google.com/document/d/17B-LnWdMlpIblM7nodchec6uMRCTtyHXM2sJvhN0xcA/edit#) for more details on how to set up the XRoad as an Information Mediator.
+
+## Set up ERegistration
+
+1. Set up eregistration:
+
+```
+$ ansible-playbook -i hosts -k ereg_coresystem.yml --ask-become-pass
+```
+
+2. Wait several minutes for everything to start up. You can ssh into the host to debug, e.g. from ansible.egovstack.net run `host@ansible:~/wkd/ereg$ ssh root@er3.egovstack.net`. It may be helpful to reboot the host a few times and run `top` or `docker ps` to see which processes are healthy.
+
+3. Ensure keycloak has started up completely, then comment out `KEYCLOAK_USER=$KEYCLOAK_ADMIN_USER` and `KEYCLOAK_PASSWORD=$KEYCLOAK_ADMIN_USER_PASSWORD` in the docker compose, e.g. `# vim /opt/eregistrations/compose/eregistrations/docker-compose.yml` followed by `docker-compose up -d keycloak`
