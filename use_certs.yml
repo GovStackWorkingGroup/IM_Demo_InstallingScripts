@@ -26,6 +26,11 @@
       state: link
       force: yes
 
+  - name: restart nginx
+    service:
+      name: nginx
+      state: restarted
+
 - hosts: ss_servers
 
   remote_user: root
