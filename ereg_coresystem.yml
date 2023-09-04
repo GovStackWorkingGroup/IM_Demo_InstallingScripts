@@ -1,0 +1,411 @@
+---
+- name: Include a play after another play
+  import_playbook: haproxy-certs.yml
+
+- name: Core system setup for eregistrations v4
+
+  hosts: all
+
+  vars_files: vars_with_secret.yml
+  vars:
+    words: "{{ inventory_hostname.split('.') }}"
+    domain_name: "{{ words[0]+'.ext.'+'.'.join(words[1:]) }}"
+
+  tasks:
+  - name: Purge unneeded packages
+    apt:
+      pkg:
+        - dovecot
+        - sw-nginx
+        - sw-engine
+        - sw-cp-server
+        - sw-collectd
+        - apache2*
+        - mysql-common
+        - postfix*
+        - bind9*
+        # - plesk*
+      state: absent
+      install_recommends: no
+    become: true
+
+# See https://docs.mongodb.com/manual/tutorial/install-mongodb-on-ubuntu/
+
+  - name: Add mongodb-org apt signing key
+    ansible.builtin.apt_key:
+      url: https://www.mongodb.org/static/pgp/server-5.0.asc
+      state: present
+    become: true
+
+  - name: Add mongodb-org repository into sources list
+    ansible.builtin.apt_repository:
+      repo: deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/5.0 multiverse
+      state: present
+    become: true
+
+  - name: Install mongodb-org
+    apt:
+      pkg:
+        - mongodb-org
+      install_recommends: no
+    become: true
+
+  - name: In /etc/mongod.conf change 'bindIp 127.0.0.1' to 0.0.0.0
+    lineinfile:
+      path: /etc/mongod.conf
+      regexp: '^  bindIp: 127.0.0.1'
+      line: '  bindIp: 0.0.0.0'
+    become: true
+
+  - name: Start mongodb, also on reboot
+    ansible.builtin.service:
+      name: mongod
+      state: started
+      enabled: yes
+    become: true
+
+# See https://www.digitalocean.com/community/tutorials/how-to-install-and-configure-elasticsearch-on-ubuntu-20-04
+
+  - name: Add elasticsearch apt signing key
+    ansible.builtin.apt_key:
+      url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+      state: present
+    become: true
+
+  - name: Add elasticsearch repository into sources list
+    ansible.builtin.apt_repository:
+      repo: deb https://artifacts.elastic.co/packages/7.x/apt stable main
+      state: present
+    become: true
+
+  - name: Install elasticsearch, required for graylog
+    apt:
+      pkg:
+        - elasticsearch
+      install_recommends: no
+    become: true
+
+  - name: In /etc/elasticsearch/elasticsearch.yml change network.host to 0.0.0.0
+    lineinfile:
+      path: /etc/elasticsearch/elasticsearch.yml
+      regexp: '^#network.host: 192.168.0.1'
+      line: 'network.host: 0.0.0.0'
+    become: true
+
+  - name: In /etc/elasticsearch/elasticsearch.yml change cluster.initial_master_nodes to node-1
+    lineinfile:
+      path: /etc/elasticsearch/elasticsearch.yml
+      regexp: '^#cluster.initial_master_nodes: \[\"node-1\", \"node-2\"\]'
+      line: 'cluster.initial_master_nodes: ["node-1"]'
+    become: true
+
+  - name: In /etc/elasticsearch/elasticsearch.yml change node.name to node-1
+    lineinfile:
+      path: /etc/elasticsearch/elasticsearch.yml
+      regexp: '^#node.name: node-1'
+      line: 'node.name: node-1'
+    become: true
+
+  - name: Start elasticsearch, also on reboot
+    ansible.builtin.service:
+      name: elasticsearch
+      state: started
+      enabled: yes
+    become: true
+
+# See https://docs.docker.com/engine/install/ubuntu/
+
+  - name: Add docker apt signing key
+    ansible.builtin.apt_key:
+      url: https://download.docker.com/linux/ubuntu/gpg
+      state: present
+    become: true
+
+  - name: Add docker repository into sources list
+    ansible.builtin.apt_repository:
+      repo: deb [ arch=amd64 ] https://download.docker.com/linux/ubuntu focal stable
+      state: present
+    become: true
+
+  - name: Install docker-ce
+    apt:
+      pkg:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+      install_recommends: no
+    become: true
+
+
+# See https://www.digitalocean.com/community/tutorials/how-to-install-and-configure-zabbix-to-securely-monitor-remote-servers-on-ubuntu-20-04
+
+  - name: Install zabbix .deb package
+    apt:
+      deb: https://repo.zabbix.com/zabbix/5.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_5.0-1+focal_all.deb
+      install_recommends: no
+    become: true
+
+  - name: Install zabbix-agent2
+    apt:
+      pkg: zabbix-agent2
+      update_cache: yes
+      install_recommends: no
+    become: true
+
+
+# See https://haproxy.debian.net/#?distribution=Ubuntu&release=focal&version=2.4
+
+  - name: Install software-properties-common for haproxy
+    apt:
+      pkg: software-properties-common
+      install_recommends: no
+    become: true
+
+  - name: Add haproxy repository into sources list
+    ansible.builtin.apt_repository:
+      repo: ppa:vbernat/haproxy-2.4
+      state: present
+    become: true
+
+  - name: Install haproxy
+    apt:
+      pkg: haproxy=2.4.*
+      update_cache: yes
+      install_recommends: no
+    become: true
+
+
+  - name: Install additional packages
+    apt:
+      pkg:
+        - auditd
+        - screen
+        - git
+        - qemu-guest-agent
+        - pbzip2
+        - python3-venv
+        - python3-pip
+        - vim-nox
+        - htop
+        - ncftp
+        - certbot
+        - ufw
+        - haproxyctl
+        - apt-transport-https
+        - ca-certificates
+        - curl
+        - default-jdk
+        - aptitude
+        - postgresql
+        - mongodb-org
+        - redis-server
+        - socat
+        - acl # for postgres/ansible
+      install_recommends: no
+    become: true
+
+  - name: In /etc/redis/redis.conf change 'bind 127.0.0.1 ::1' -> 'bind 0.0.0.0'
+    lineinfile:
+      path: /etc/redis/redis.conf
+      regexp: '^bind 127.0.0.1 ::1'
+      line: 'bind 0.0.0.0'
+    become: true
+
+  - name: Start redis, also on reboot
+    ansible.builtin.service:
+      name: redis
+      state: started
+      enabled: yes
+    become: true
+
+# Required for Ansible docker support, see https://docs.ansible.com/ansible/latest/collections/community/docker/docsite/scenario_guide.html#ansible-collections-community-docker-docsite-scenario-guide
+
+  - name: Install Ansible Docker support for Python
+    pip:
+      name: docker,docker-compose
+    become: true
+
+  - name: Allow docker to connect to postgres
+    blockinfile:
+      create: yes
+      dest: /etc/postgresql/12/main/postgresql.conf
+      block: |
+        listen_addresses = '*'
+    become: true
+
+  - name: Allow all authenticated users to connect to postgres (for keycloak inside docker)
+    postgresql_pg_hba:
+      dest: /etc/postgresql/12/main/pg_hba.conf
+      contype: host
+      users: all
+      source: 0.0.0.0/0
+      databases: all
+      method: md5
+      create: true
+    become: true
+
+  - name: Restart postgres
+    service:
+      name: postgresql
+      state: restarted
+    become: true
+
+  - name: Install Ansible postgres support for Python
+    pip:
+      name: psycopg2-binary
+    become: true
+
+  - name: Reset postgres database user
+    become: true
+    become_user: postgres
+    postgresql_user:
+      name: postgres
+      password: "{{ postgres_db_pass }}"
+
+# install eregistrations
+
+  - name: Add the ereg user
+    ansible.builtin.user:
+      name: ereg
+    become: true
+
+  - name: Creates directory
+    ansible.builtin.file:
+      path: /opt/eregistrations
+      state: directory
+      mode: '0755'
+    become: true
+
+  - name: Clone eregistrations repo
+    ansible.builtin.git:
+      repo: https://bitbucket.org/unctad/eregistrations-starter-conf.git
+      dest: /opt/eregistrations
+      single_branch: yes
+      version: master
+    become: true
+
+  - name: Install specified python requirements
+    pip:
+      requirements: /opt/eregistrations/scripts/requirements.txt
+    become: true
+
+  - name: Generate ereg passwords
+    ansible.builtin.shell: python3 /opt/eregistrations/scripts/deploy.py --auth-service=KEYCLOAK --step-pwd
+    args:
+      chdir: /opt/eregistrations/scripts
+    become: true
+
+  - name: Clean ereg auth
+    ansible.builtin.shell: python3 /opt/eregistrations/scripts/deploy.py --auth-service=KEYCLOAK --step-auth
+    args:
+      chdir: /opt/eregistrations/scripts
+    become: true
+
+
+# Update /opt/eregistrations/compose/eregistrations/.env for all #changeme entries:
+
+  - name: Substitute FORMIO_EMAIL
+    lineinfile:
+      path: /opt/eregistrations/compose/eregistrations/.env
+      regexp: '^FORMIO_EMAIL= #changeme'
+      line: 'FORMIO_EMAIL={{ formio_email }}'
+    become: true
+  - name: Substitute GRAYLOG_ROOT_PASSWORD
+    lineinfile:
+      path: /opt/eregistrations/compose/eregistrations/.env
+      regexp: '^GRAYLOG_ROOT_PASSWORD=e65ec2b4e96ecae33c4c67da69cbd3cbf72c8635ac4fb3292b5980befc851802 #changeme'
+      line: 'GRAYLOG_ROOT_PASSWORD={{ graylog_root_password }}'
+    become: true
+  - name: Substitute MAIL_HOST
+    lineinfile:
+      path: /opt/eregistrations/compose/eregistrations/.env
+      regexp: '^MAIL_HOST=mail.unctad.org #changeme'
+      line: 'MAIL_HOST={{ smtp_host }}'
+    become: true
+  - name: Substitute MAIL_PORT
+    lineinfile:
+      path: /opt/eregistrations/compose/eregistrations/.env
+      regexp: '^MAIL_PORT=mail.unctad.org #changeme'
+      line: 'MAIL_PORT={{ smtp_port }}'
+    become: true
+  - name: Substitute MAIL_USERNAME
+    lineinfile:
+      path: /opt/eregistrations/compose/eregistrations/.env
+      regexp: '^MAIL_USERNAME=none #changeme'
+      line: 'MAIL_USERNAME={{ smtp_username }}'
+    become: true
+  - name: Substitute MAIL_PASSWORD
+    lineinfile:
+      path: /opt/eregistrations/compose/eregistrations/.env
+      regexp: '^MAIL_PASSWORD=none #changeme'
+      line: 'MAIL_PASSWORD={{ smtp_password }}'
+    become: true
+  - name: Substitute MAIL_REPLY_TO
+    lineinfile:
+      path: /opt/eregistrations/compose/eregistrations/.env
+      regexp: '^MAIL_REPLY_TO=no-reply@unctad.org #changeme'
+      line: 'MAIL_REPLY_TO={{ smtp_replyto }}'
+    become: true
+  - name: Substitute MAIL_FROM
+    lineinfile:
+      path: /opt/eregistrations/compose/eregistrations/.env
+      regexp: '^MAIL_FROM=no-reply@unctad.org #changeme'
+      line: 'MAIL_FROM={{ smtp_from }}'
+    become: true
+  - name: Substitute SYSTEM_CODE
+    lineinfile:
+      path: /opt/eregistrations/compose/eregistrations/.env
+      regexp: '^SYSTEM_CODE=CH #changeme'
+      line: 'SYSTEM_CODE={{ system_code }}'
+    become: true
+  - name: Substitute DEFAULT_LANGUAGE
+    lineinfile:
+      path: /opt/eregistrations/compose/eregistrations/.env
+      regexp: '^DEFAULT_LANGUAGE=en #changeme'
+      line: 'DEFAULT_LANGUAGE={{ default_language }}'
+    become: true
+  - name: Substitute YOUR_DOMAIN_NAME
+    lineinfile:
+      path: /opt/eregistrations/compose/eregistrations/.env
+      regexp: '^YOUR_DOMAIN_NAME=eregistrations.org #changeme'
+      line: 'YOUR_DOMAIN_NAME={{ domain_name }}'
+    become: true
+  - name: Substitute TIME_ZONE
+    lineinfile:
+      path: /opt/eregistrations/compose/eregistrations/.env
+      regexp: '^TIME_ZONE=Europe/Zurich #changeme'
+      line: 'TIME_ZONE={{ time_zone }}'
+    become: true
+  - name: Substitute DOCKER_PASSWORD
+    lineinfile:
+      path: /opt/eregistrations/compose/eregistrations/.env
+      regexp: '^DOCKER_PASSWORD= #askus'
+      line: 'DOCKER_PASSWORD={{ docker_password }}'
+    become: true
+  - name: Substitute PATH_TO_SSL_CERTIFICATE
+    lineinfile:
+      path: /opt/eregistrations/compose/eregistrations/.env
+      regexp: '^PATH_TO_SSL_CERTIFICATE=/etc/letsencrypt/live/YOUR_DOMAIN_NAME/haproxy.crt #changeme'
+      line: "PATH_TO_SSL_CERTIFICATE={{ ' crt '.join(haproxy_certs) }}"
+    become: true
+
+  - name: Finish ereg install
+    ansible.builtin.shell: python3 /opt/eregistrations/scripts/deploy.py --auth-service=KEYCLOAK --step-all
+    args:
+      chdir: /opt/eregistrations/scripts
+    become: true
+
+  - name: Set permissions
+    ansible.builtin.file:
+      path: /opt/eregistrations
+      state: directory
+      owner: ereg
+      group: ereg
+      mode: '0755'
+    become: true
+
+# NOTE: can only reboot after keycloak comes up the first time...
+  # - name: Reboot
+  #   reboot:
+  #     reboot_timeout: 3600
+  #   become: true
