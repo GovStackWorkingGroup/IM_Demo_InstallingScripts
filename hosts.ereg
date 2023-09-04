@@ -1,0 +1,22 @@
+#central servers (ubuntu)
+[ereg_servers]
+er1.egovstack.net
+er2.egovstack.net
+
+#a custom super group for overriding variable defaults
+[example:children]
+ereg_servers
+
+#eregistration
+[ereg]
+er1.egovstack.net
+er2.egovstack.net
+
+### vars ###
+
+[ereg_servers:vars]
+variant=vanilla
+
+[all:vars]
+# extra locales to enable on Ubuntu servers
+#extra_locales=['fi_FI.UTF-8', 'is_IS.UTF-8']

@@ -73,3 +73,34 @@
     service:
       name: xroad-proxy-ui-api
       state: restarted
+      
+- hosts: misp_servers
+
+  remote_user: root
+
+  vars:
+    letsencrypt_keys_dir: /etc/letsencrypt/keys
+    letsencrypt_certs_dir: /etc/letsencrypt/certs
+    words: "{{ inventory_hostname.split('.') }}"
+    domain_name: "{{ words[0]+'.ext.'+'.'.join(words[1:]) }}"
+
+  tasks:
+
+  - name: use generated key
+    file:
+      dest: /etc/apache2/ssl/httpsd.key
+      src: "{{ letsencrypt_keys_dir }}/{{ domain_name }}.key"
+      state: link
+      force: yes
+
+  - name: use certificate
+    file:
+      dest: /etc/apache2/ssl/httpsd.cert
+      src: "{{ letsencrypt_certs_dir }}/{{ domain_name }}.crt"
+      state: link
+      force: yes
+
+  - name: restart ui
+    service:
+      name: apache2
+      state: restarted
